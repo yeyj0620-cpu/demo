@@ -1,3 +1,7 @@
+# Key（绝不上传）
+key.txt
+.env
+
 # Python
 __pycache__/
 *.py[cod]
@@ -5,13 +9,17 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-
-# Virtual environments
 .venv/
 venv/
 env/
 
-# Editors / OS
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 编辑器 / 系统
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
