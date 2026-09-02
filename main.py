@@ -34,6 +34,15 @@ RSS_FEEDS = {
 app = FastAPI(title="舆情全链路智能处置工作台")
 
 
+@app.middleware("http")
+async def no_cache_static(request: Request, call_next):
+    """本地工具：静态页面不缓存，改动后浏览器刷新即生效，无需手动清缓存。"""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Key 读取
 # ---------------------------------------------------------------------------

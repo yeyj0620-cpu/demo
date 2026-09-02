@@ -104,6 +104,12 @@ def test_index_endpoint():
     assert "舆情全链路智能处置工作台" in r.text
 
 
+def test_static_no_cache():
+    client = TestClient(main.app)
+    r = client.get("/")
+    assert r.headers.get("cache-control") == "no-store"
+
+
 def test_status_endpoint():
     client = TestClient(main.app)
     r = client.get("/api/status")
