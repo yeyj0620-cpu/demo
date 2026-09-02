@@ -10,7 +10,7 @@
 
 | 模块 | 说明 |
 |---|---|
-| ① 舆情采集 | 聚合真实 RSS 新闻（36氪 / 少数派 / 爱范儿），情感标注 |
+| ① 舆情采集 | 导入「社交平台」舆情 Excel（Brandwatch 导出）或聚合 RSS 新闻，选择研判对象 |
 | ② AI 核查 | 真实性研判（真/假/存疑）+ 证据链 + 风险等级 + 处置建议 |
 | ③ AI 事实评论 | 生成符合风格的回应口径 |
 | ④ AI 投诉处置 | 分类 / 优先级 / 转办部门 / 回复话术 |
@@ -22,11 +22,12 @@
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 配置 Key（二选一）
-#    方式 A：环境变量
+# 2. 配置 Key（三选一）
+#    方式 A：启动后点页面右上角的 Key 徽标，直接在界面里粘贴保存（推荐）
+#    方式 B：环境变量
 #      Linux/macOS: export DEEPSEEK_API_KEY=sk-xxxx
 #      Windows:     set DEEPSEEK_API_KEY=sk-xxxx
-#    方式 B：在项目根目录新建 key.txt，写入 sk-xxxx（已 gitignore）
+#    方式 C：在项目根目录新建 key.txt，写入 sk-xxxx（已 gitignore）
 
 # 3. 启动
 uvicorn main:app --reload
@@ -48,7 +49,8 @@ python main.py
 
 ## 说明
 
-- Key 只放两处：Render 环境变量（生产）、本地 `key.txt`（开发），绝不写进代码
+- Key 只放两处：Render 环境变量（生产）、本地 `key.txt`（开发，可在页面里直接填写保存），绝不写进代码
+- 「导入舆情 Excel」：选择 Brandwatch mentions 导出的 .xlsx，自动识别「情感属性 / 标签列 / 品牌类别 / 情感 / 平台 / 国家」等字段；默认隐藏「无关」条目，点「选为研判对象」即可进入核查/评论
 - 处置留痕存浏览器 localStorage（`handling_log`），换浏览器会丢，可用「导出 .md」备份
 - 无 Key 时页面会明确引导配置，不降级到假 AI、不显示写死结果
 

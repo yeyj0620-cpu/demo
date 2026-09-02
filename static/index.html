@@ -10,7 +10,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <h1>舆情全链路智能处置工作台</h1>
-      <span id="key-status" class="key-badge">检测中…</span>
+      <span id="key-status" class="key-badge" title="点击配置 DeepSeek Key">检测中…</span>
     </div>
   </header>
 
@@ -32,9 +32,21 @@
     <section id="panel-collect" class="panel active">
       <div class="panel-head">
         <h2>舆情采集</h2>
-        <button id="refresh-rss" class="btn">刷新 RSS</button>
+        <div class="head-actions">
+          <button id="refresh-rss" class="btn">刷新 RSS</button>
+        </div>
       </div>
-      <p class="hint">聚合真实 RSS 新闻（36氪 / 少数派 / 爱范儿）。点击条目「选为研判对象」，它将成为后续所有模块的处理目标。</p>
+      <p class="hint">导入「社交平台」舆情数据（Brandwatch 导出的 .xlsx），或点「刷新 RSS」加载真实新闻。点击条目「选为研判对象」，它将成为后续所有模块的处理目标。</p>
+      <div class="import-box">
+        <label class="btn primary import-btn">
+          <input id="file-input" type="file" accept=".xlsx,.xls" hidden>
+          导入舆情 Excel
+        </label>
+        <span id="import-info" class="import-info">尚未导入数据</span>
+        <label class="filter-toggle">
+          <input id="hide-irrelevant" type="checkbox" checked> 隐藏「无关」条目
+        </label>
+      </div>
       <ul id="news-list" class="news-list"></ul>
     </section>
 
@@ -86,13 +98,12 @@
   <!-- 配 Key 弹窗 -->
   <div id="key-modal" class="modal hidden">
     <div class="modal-box">
-      <h3>如何配置 DeepSeek Key</h3>
-      <ol class="modal-list">
-        <li>本地开发：在项目根目录新建 <code>key.txt</code>，写入 <code>sk-xxxx</code>（已 gitignore）。</li>
-        <li>生产部署：在 Render 的 Environment 里设置变量 <code>DEEPSEEK_API_KEY</code>。</li>
-      </ol>
+      <h3>配置 DeepSeek Key</h3>
+      <p id="key-modal-status" class="hint"></p>
+      <input id="key-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
       <div class="modal-actions">
-        <button id="recheck-key" class="btn primary">重新检测</button>
+        <button id="save-key" class="btn primary">保存</button>
+        <button id="clear-key" class="btn danger">清除</button>
         <button id="close-key-modal" class="btn">关闭</button>
       </div>
     </div>

@@ -4,14 +4,17 @@
 DeepSeek Key 只从环境变量 DEEPSEEK_API_KEY 或本地 key.txt（已 gitignore）读取，绝不写死在代码里。
 """
 
+import io
 import json
 import os
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import openpyxl
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -46,6 +49,34 @@ def load_api_key() -> str | None:
         if content:
             return content
     return None
+
+
+def key_source() -> str | None:
+    """返回当前 Key 来源：'env' / 'file' / None（便于前端区分能否在界面里修改）。"""
+    if os.environ.get("DEEPSEEK_API_KEY", "").strip():
+        return "env"
+    if (BASE_DIR / "key.txt").exists():
+        return "file"
+    return None
+
+
+def save_api_key(key: str) -> None:
+    """把 Key 写入本地 key.txt；传入空串则清除。环境变量 Key 优先级更高，不影响此文件。"""
+    key_file = BASE_DIR / "key.txt"
+    key = (key or "").strip()
+    if key:
+        key_file.write_text(key, encoding="utf-8")
+    elif key_file.exists():
+        key_file.unlink()
+
+
+def mask_key(key: str | None) -> str:
+    """只返回脱敏后的 Key，用于前端显示，避免完整 Key 泄露到页面。"""
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "sk-****"
+    return f"{key[:6]}****{key[-4:]}"
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +236,109 @@ def fetch_rss() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# 舆情数据导入（Brandwatch mentions 导出的 .xlsx）
+# ---------------------------------------------------------------------------
+# 表头 → 归一化字段名（只取研判/展示真正需要的列，其余 120+ 列忽略）
+MENTION_COLUMNS = {
+    "情感属性": "sentiment_manual",  # 人工中文情感（正面/中性/负面），可能为空
+    "标签列": "tag",                 # 人工话题标签；值为「无关」表示与业务无关
+    "序号": "index",
+    "品牌类别": "brand",             # 红旗/集团/解放/奔腾
+    "北京时间": "time",
+    "Title": "title",
+    "Snippet": "snippet",
+    "Url": "url",
+    "Domain": "domain",
+    "Sentiment": "sentiment",        # 英文机器情感（positive/neutral/negative）
+    "Emotion": "emotion",
+    "Page Type": "platform",
+    "Language": "language",
+    "Country": "country",
+    "Author": "author",
+}
+
+_EXCEL_EPOCH = datetime(1899, 12, 30)
+
+
+def _cell_text(v) -> str:
+    """把单元格值转成干净文本。"""
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M")
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _serial_time(v) -> str:
+    """Excel 日期序列号 → 'YYYY-MM-DD HH:MM' 文本。"""
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M")
+    try:
+        return (_EXCEL_EPOCH + timedelta(days=float(v))).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return _cell_text(v)
+
+
+def parse_mentions_xlsx(data: bytes) -> list[dict]:
+    """解析 Brandwatch mentions 导出的 xlsx 字节流，返回归一化后的舆情条目列表。
+
+    跳过整行为空的行；只保留有 title / snippet / tag 中至少一项的行。
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    try:
+        ws = wb.worksheets[0]
+        rows = ws.iter_rows(values_only=True)
+        header = next(rows, None)
+        if header is None:
+            return []
+
+        col_map: dict[str, int] = {}
+        for idx, name in enumerate(header):
+            if name in MENTION_COLUMNS:
+                col_map[MENTION_COLUMNS[name]] = idx
+
+        def get(row: tuple, key: str):
+            idx = col_map.get(key)
+            return row[idx] if idx is not None and idx < len(row) else None
+
+        items: list[dict] = []
+        for row in rows:
+            if row is None or all(c is None or str(c).strip() == "" for c in row):
+                continue
+            title = _cell_text(get(row, "title"))
+            snippet = _cell_text(get(row, "snippet"))
+            tag = _cell_text(get(row, "tag"))
+            if not (title or snippet or tag):
+                continue
+            items.append(
+                {
+                    "index": _cell_text(get(row, "index")),
+                    "brand": _cell_text(get(row, "brand")),
+                    "tag": tag,
+                    "sentiment_manual": _cell_text(get(row, "sentiment_manual")),
+                    "sentiment": _cell_text(get(row, "sentiment")),
+                    "emotion": _cell_text(get(row, "emotion")),
+                    "title": title,
+                    "snippet": snippet,
+                    "url": _cell_text(get(row, "url")),
+                    "domain": _cell_text(get(row, "domain")),
+                    "platform": _cell_text(get(row, "platform")),
+                    "language": _cell_text(get(row, "language")),
+                    "country": _cell_text(get(row, "country")),
+                    "author": _cell_text(get(row, "author")),
+                    "time": _serial_time(get(row, "time")),
+                }
+            )
+        return items
+    finally:
+        wb.close()
+
+
+# ---------------------------------------------------------------------------
 # 路由
 # ---------------------------------------------------------------------------
 @app.get("/")
@@ -214,12 +348,39 @@ def index():
 
 @app.get("/api/status")
 def status():
-    return {"deepseek": bool(load_api_key())}
+    key = load_api_key()
+    return {
+        "deepseek": bool(key),
+        "source": key_source(),
+        "masked": mask_key(key),
+    }
+
+
+@app.post("/api/key")
+def set_key(req: dict):
+    """在界面里直接配置/清除 DeepSeek Key（写入本地 key.txt，已 gitignore）。"""
+    save_api_key(req.get("key") or "")
+    return {"ok": True, "deepseek": bool(load_api_key())}
 
 
 @app.get("/api/rss")
 def rss():
     return {"ok": True, "items": fetch_rss()}
+
+
+@app.post("/api/import")
+async def import_mentions(request: Request):
+    """接收前端以二进制上传的 .xlsx，解析并返回归一化舆情条目列表。"""
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="未收到文件内容")
+    try:
+        items = parse_mentions_xlsx(body)
+    except Exception as exc:  # noqa: BLE001 —— 解析失败要给用户可读提示
+        raise HTTPException(status_code=400, detail=f"解析 Excel 失败：{exc}")
+    if not items:
+        raise HTTPException(status_code=400, detail="未能从文件中解析出任何舆情条目")
+    return {"ok": True, "items": items}
 
 
 @app.post("/api/deepseek")
