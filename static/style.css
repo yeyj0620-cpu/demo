@@ -309,6 +309,16 @@ main {
   min-height: 200px;
 }
 
+/* 数据分析报告 iframe */
+.report-frame {
+  width: 100%;
+  height: 640px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  margin-top: 8px;
+}
+
 /* 弹窗 */
 .modal {
   position: fixed;

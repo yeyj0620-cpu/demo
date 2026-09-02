@@ -25,6 +25,7 @@
     <button class="tab" data-tab="comment">③ AI 事实评论</button>
     <button class="tab" data-tab="complaint">④ AI 投诉处置</button>
     <button class="tab" data-tab="report">⑤ 处置报告</button>
+    <button class="tab" data-tab="analysis">⑥ 数据分析报告</button>
   </nav>
 
   <main>
@@ -92,6 +93,20 @@
       </div>
       <p class="hint">留痕存浏览器 localStorage（换浏览器会丢），可用「导出 .md」备份。</p>
       <pre id="report-preview" class="report"></pre>
+    </section>
+
+    <!-- ⑥ 数据分析报告 -->
+    <section id="panel-analysis" class="panel">
+      <div class="panel-head">
+        <h2>数据分析报告</h2>
+        <div class="head-actions">
+          <button id="gen-report" class="btn primary">生成报告</button>
+          <button id="open-report" class="btn" disabled>新窗口打开</button>
+        </div>
+      </div>
+      <p class="hint">对「舆情采集」最近一次导入的 Excel 做统计（数字由程序算），再由 DeepSeek 判情感、写结论，生成可视化 HTML 报告：情感 / 品牌 / 话题 / 平台 / 地区 / 时间趋势 / 热门 / 风险。</p>
+      <div id="report-status" class="hint"></div>
+      <iframe id="report-frame" class="report-frame" title="数据分析报告" style="display:none"></iframe>
     </section>
   </main>
 

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>舆情日报</title>
+<!-- 图表库 CDN（中国可用；如需离线可下载 echarts.min.js 放本地替换此 src） -->
+<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root{
+  --page:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --border:rgba(11,11,11,0.10);
+  --blue:#2a78d6; --green:#0ca30c; --red:#d03b3b; --gray:#898781;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;line-height:1.6}
+.wrap{max-width:1100px;margin:0 auto;padding:32px 24px 64px}
+header h1{margin:0 0 4px;font-size:24px;font-weight:700}
+header .sub{color:var(--ink2);font-size:13px}
+.lead{color:var(--ink2);font-size:14px;margin:12px 0 0;max-width:72ch}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0}
+.kpi .card{padding:16px 18px}
+.kpi .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:14px}
+.card h2{margin:0 0 2px;font-size:15px;font-weight:600}
+.card .concl{color:var(--ink2);font-size:13px;margin:8px 0 0}
+.chart{width:100%;height:260px}
+ul.list{list-style:none;margin:8px 0 0;padding:0}
+ul.list li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--grid);font-size:13px}
+ul.list li:first-child{border-top:none}
+ul.list .meta{color:var(--muted);font-size:12px}
+ul.list a{color:var(--blue);text-decoration:none}
+.badge{display:inline-block;padding:0 8px;border-radius:10px;font-size:11px;line-height:20px;color:#fff;white-space:nowrap}
+.b-neg{background:var(--red)} .b-pos{background:var(--green)} .b-neu{background:var(--gray)}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.kpi{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">舆情日报</h1>
+    <div class="sub" id="subtitle"></div>
+    <p class="lead" id="overview"></p>
+  </header>
+  <div class="kpi" id="kpi"></div>
+  <div class="grid">
+    <div class="card"><h2>情感分布</h2><div class="chart" id="c-sentiment"></div><div class="concl" id="t-sentiment"></div></div>
+    <div class="card"><h2>品牌分布</h2><div class="chart" id="c-brand"></div><div class="concl" id="t-brand"></div></div>
+    <div class="card"><h2>话题分布</h2><div class="chart" id="c-topic"></div><div class="concl" id="t-topic"></div></div>
+    <div class="card"><h2>平台分布</h2><div class="chart" id="c-platform"></div><div class="concl" id="t-platform"></div></div>
+    <div class="card"><h2>地区分布</h2><div class="chart" id="c-country"></div><div class="concl" id="t-region"></div></div>
+  </div>
+  <div class="card"><h2>时间趋势</h2><div class="chart" id="c-time"></div><div class="concl" id="t-time"></div></div>
+  <div class="card"><h2>热门内容</h2><ul class="list" id="c-top"></ul><div class="concl" id="t-top"></div></div>
+  <div class="card"><h2>风险提示</h2><ul class="list" id="c-risk"></ul><div class="concl" id="t-risk"></div></div>
+</div>
+<script>
+const REPORT = __REPORT_DATA__;
+const S = REPORT.subdatasets, C = REPORT.conclusions || {}, K = S.kpi;
+const SENTI = {'正面':'#0ca30c','中性':'#898781','负面':'#d03b3b','未知':'#c3c2b7'};
+const BRAND = {'红旗':'#2a78d6','解放':'#eb6834','奔腾':'#1baf7a','集团':'#eda100'};
+const BLUE = '#2a78d6', GRAY = '#c3c2b7';
+const INK2 = '#52514e', MUTED = '#898781', GRID = '#e1e0d9', AXIS = '#c3c2b7';
+
+const fmt = n => {
+  if (n >= 1e8) return (n/1e8).toFixed(1)+'亿';
+  if (n >= 1e4) return (n/1e4).toFixed(1)+'万';
+  return Math.round(n).toLocaleString('zh-CN');
+};
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.getElementById('title').textContent = C.title || '舆情日报';
+const ts = S.time_series || [];
+const range = ts.length ? (ts[0].hour + ' ~ ' + ts[ts.length-1].hour) : '';
+document.getElementById('subtitle').textContent = range;
+document.getElementById('overview').textContent = C.overview || '';
+
+const kpis = [['总提及', K.total], ['正面', K.positive], ['中性', K.neutral],
+              ['负面', K.negative], ['总触达', fmt(K.total_reach)], ['总影响', fmt(K.total_impact)]];
+document.getElementById('kpi').innerHTML = kpis.map(([l,v]) =>
+  `<div class="card"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+const baseAxis = {grid:{left:8,right:40,top:8,bottom:8,containLabel:true},
+  xAxis:{type:'value',axisLabel:{color:MUTED},splitLine:{lineStyle:{color:GRID}}},
+  yAxis:{type:'category',inverse:true,axisLabel:{color:INK2},axisLine:{lineStyle:{color:AXIS}}}};
+
+function hasChart(){ return typeof echarts !== 'undefined'; }
+
+function hBar(id, items, colorOf){
+  if(!hasChart()) return;
+  const el = echarts.init(document.getElementById(id));
+  el.setOption(Object.assign({}, baseAxis, {
+    yAxis:Object.assign({}, baseAxis.yAxis, {data:items.map(d=>d.name)}),
+    series:[{type:'bar',barWidth:'60%',
+      data:items.map(d=>({value:d.count,itemStyle:{color:colorOf(d.name)}})),
+      itemStyle:{borderRadius:[0,4,4,0]},
+      label:{show:true,position:'right',color:INK2},
+      tooltip:{valueFormatter:v=>v.toLocaleString()}}]
+  }));
+}
+
+function donut(id, items, colorOf){
+  if(!hasChart()) return;
+  const total = items.reduce((s,d)=>s+d.count,0);
+  echarts.init(document.getElementById(id)).setOption({
+    tooltip:{trigger:'item',formatter:p=>`${p.name}: ${p.value} (${p.percent}%)`},
+    legend:{bottom:0,textStyle:{color:INK2}},
+    series:[{type:'pie',radius:['52%','75%'],center:['50%','44%'],
+      data:items.map(d=>({name:d.name,value:d.count,itemStyle:{color:colorOf(d.name)}})),
+      label:{formatter:p=>`${p.name}\n${p.percent}%`,color:INK2},
+      labelLine:{lineStyle:{color:AXIS}}}],
+    graphic:{type:'text',left:'center',top:'40%',style:{text:String(total),fontSize:22,fontWeight:'bold',textAlign:'center',fill:'#0b0b0b'}}
+  });
+}
+
+function line(id, hours, counts){
+  if(!hasChart()) return;
+  echarts.init(document.getElementById(id)).setOption({
+    tooltip:{trigger:'axis'},
+    grid:{left:8,right:16,top:16,bottom:8,containLabel:true},
+    xAxis:{type:'category',data:hours,axisLabel:{color:MUTED},axisLine:{lineStyle:{color:AXIS}}},
+    yAxis:{type:'value',axisLabel:{color:MUTED},splitLine:{lineStyle:{color:GRID}}},
+    series:[{type:'line',data:counts,smooth:true,symbol:'none',
+      lineStyle:{color:BLUE,width:2},areaStyle:{color:'rgba(42,120,214,0.10)'}}]
+  });
+}
+
+function mentionLi(r){
+  const b = r.sentiment==='负面'?'b-neg':r.sentiment==='正面'?'b-pos':'b-neu';
+  const meta = [r.brand, r.domain, r.country].filter(Boolean).map(esc).join(' · ') + ' | 影响 ' + fmt(r.impact);
+  const body = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : `<span>${esc(r.title)}</span>`;
+  return `<li><span class="badge ${b}">${esc(r.sentiment)}</span><div style="flex:1">${body}<div class="meta">${meta}</div></div></li>`;
+}
+
+hBar('c-brand', S.brand || [], n => BRAND[n] || GRAY);
+hBar('c-topic', S.topic || [], () => BLUE);
+hBar('c-platform', S.platform || [], () => BLUE);
+hBar('c-country', S.country || [], () => BLUE);
+donut('c-sentiment', (S.sentiment && Object.entries(S.sentiment).map(([k,v])=>({name:k,count:v}))) || [], n => SENTI[n] || GRAY);
+line('c-time', ts.map(d=>d.hour.slice(11)), ts.map(d=>d.count));
+
+document.getElementById('c-top').innerHTML = (S.top_mentions||[]).map(mentionLi).join('') || '<li>暂无数据</li>';
+document.getElementById('c-risk').innerHTML = (S.risk_mentions||[]).map(mentionLi).join('') || '<li>本窗口无负面提及</li>';
+
+const sec = C.sections || {};
+['sentiment','brand','topic','platform','region','time','top','risk'].forEach(k => {
+  const el = document.getElementById('t-'+k);
+  if (el) el.textContent = sec[k] || '';
+});
+</script>
+</body>
+</html>

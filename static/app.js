@@ -22,6 +22,7 @@ const state = {
   newsSource: "rss", // 'rss' | 'import'
   hideIrrelevant: true,
   sentimentSource: "ai",
+  reportHtml: null, // 最近一次生成的数据分析报告 HTML
 };
 
 // ---------- 初始化 ----------
@@ -145,6 +146,8 @@ function bindEvents() {
   $("#run-complaint").addEventListener("click", runComplaint);
   $("#export-report").addEventListener("click", exportReport);
   $("#clear-log").addEventListener("click", clearLog);
+  $("#gen-report").addEventListener("click", generateReport);
+  $("#open-report").addEventListener("click", openReport);
   $("#key-status").addEventListener("click", openKeyModal);
   $("#open-key-modal").addEventListener("click", openKeyModal);
   $("#save-key").addEventListener("click", saveKey);
@@ -575,6 +578,41 @@ function exportReport() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// ---------- ⑥ 数据分析报告 ----------
+async function generateReport() {
+  if (!ensureKey()) return;
+  const status = $("#report-status");
+  const frame = $("#report-frame");
+  setBusy("#gen-report", true);
+  $("#open-report").disabled = true;
+  status.textContent = "正在统计并生成报告（含 DeepSeek 写结论），请稍候…";
+  frame.style.display = "none";
+  try {
+    const res = await fetch("/api/report", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.detail || `生成失败（HTTP ${res.status}）`);
+    }
+    state.reportHtml = data.html || "";
+    status.textContent = `已生成报告：${data.title || "舆情日报"}（数据源：${data.name || ""}）`;
+    frame.srcdoc = state.reportHtml;
+    frame.style.display = "block";
+    $("#open-report").disabled = false;
+  } catch (e) {
+    status.textContent = `生成失败：${e.message}`;
+  } finally {
+    setBusy("#gen-report", false);
+  }
+}
+
+function openReport() {
+  if (!state.reportHtml) return;
+  const blob = new Blob([state.reportHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 // ---------- 工具 ----------
